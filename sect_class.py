@@ -1,12 +1,12 @@
 import re
 
-
 #class Program:
 
 class Section:
     type = ""
     name = ""
     content = ""
+    processed = ""
 
     def __init__(self, _content = "", _type = "", _name = ""):
         self.content = _content
@@ -23,6 +23,23 @@ class DataSect(Section):
     mask_type = ""
     mask = []
     weights = []
+    arrays = []
+    structs = []
+    ops = []
+
+    def split_op(self):
+        decl_pattern = r"(\w+): (\w+) = (\d+)"
+        arr_pattern = r"(\w+: )(?P<type>\w+)\[\d+](.*?)\);"
+        struct_pattern = r"struct (\w+)\n(.*?)end (\1)"
+        all_patterns = re.compile(fr"{decl_pattern}|{arr_pattern}", re.DOTALL)
+        found = re.finditer(all_patterns, self.content)
+        for match in found:
+            if match.group(1):
+                self.ops.append([match.group(), "decl"])
+            elif match.group(4):
+                self.ops.append([match.group(), "arr"])
+
+        return self.ops
 
     def exctractWeights(self):
         w = re.compile(r"(?<=Weights: )(?P<type>\w+)\[\d+](.*?)(?=;)", re.DOTALL)
@@ -52,10 +69,24 @@ class DataSect(Section):
 
 class CodeSect(Section):
     has_set = False
+    macro_set = (r".macro SET reg,val"
+                 "#if __NM4__== 0)"
+                     "\\reg = \\val; "
+                 "#else"
+                     "sir = \\val; "
+                     "\\reg = sir;"
+                 "#endif"
+                 ".endm")
 
     def __init__(self, _content, _type, _name):
         super().__init__(_content, _type, _name)
         self.has_set = bool(re.search(r"nb1|sb", _content))
+
+
+    def process(self):
+        for line in self.content.split("\n"):
+            pass
+
 
 
 class NoBitsSect(Section):

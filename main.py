@@ -42,8 +42,9 @@ def findmask(section):
         section.Masks.append(match.group())
 
 
-input_file = "Step11.asm"
+input_file = "Step10.asm"
 
+ofile = open("output.S", "w")
 
 file = open(input_file, 'r')
 filetext = file.read()
@@ -53,6 +54,8 @@ file.close()
 createSections(filetext, sects)
 
 print(sects)
+f = sects[0].split_op()
+print(f)
 
 sects[0].exctractWeights()
 print(sects[0].weights)
@@ -60,12 +63,12 @@ print(sects[0].weights)
 for section in sects:
     section.process()
 
+for line in sects[1].content.split("\n"):
+    if (re.search(r"<(\w+)>", line)):
+        print(re.sub(r"<(\w+)>", r"\1:", line, 1))
+    elif (re.search(r"(nb1|sb)", line)):
+        print(re.sub(r"(nb1|sb) =( )+(.*?);", r"SET \1 \3", line))
 
-#findmask(data_sect)
-
-#print(data_sect.Masks)
-
-
-
-
+    else:
+        print(line)
 
