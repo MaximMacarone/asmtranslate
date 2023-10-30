@@ -1,16 +1,55 @@
 import re
 
-#class Program:
+dataSect_pattern = r"(?P<data>data) \"(?P<dname>.\w+)\"(?P<dcontent>.+?)end \"\2\";"
+
+nobitsSect_pattern = r"(?P<nobits>nobits) \"(?P<nname>.\w+)\"(?P<ncontent>.+?)end \"\5\";"
+
+codeSect_pattern = r"(?P<begin>begin) \"(?P<bname>.\w+)\"(?P<bcontent>.+?)end \"\8\";"
+
+global_pattern = r"(.*?(?=begin|data|nobits))|(?=end \"\w+\";).*?"
+
+allSect_pattern = re.compile(fr"{dataSect_pattern}|{nobitsSect_pattern}|{codeSect_pattern}", re.DOTALL)
+
+class Program:
+
+    inputFile = ""
+    outputFile = ""
+    content = ""
+    short_content = ""
+    sections = []
+
+    def __init__(self, _inputfile):
+        self.inputFile = _inputfile
+        with open(self.inputFile) as inp:
+            self.content = inp.read()
+        self.short_content = self.content
+
+    def deleteComments(self):
+        self.content = re.sub(r"//.*?$", "", self.content, flags=re.MULTILINE)
+        self.short_content = self.content
+
+    def createSections(self):
+        found = re.finditer(allSect_pattern, self.content)
+        for match in found:
+            if match.group('data'):
+                self.sections.append(DataSect(match.group('dname'), match.group('dcontent')))
+                self.short_content = re.sub(re.escape(match.group()), f"{match.group('dname')} [...]", self.short_content)
+            elif match.group('nobits'):
+                self.sections.append(NoBitsSect(match.group('nname'), match.group('ncontent')))
+                self.short_content = self.short_content.replace(match.group(), f"{match.group('nname')} [...]")
+            elif match.group('begin'):
+                self.sections.append(CodeSect(match.group('bname'), match.group('bcontent')))
+                self.short_content = self.short_content.replace(match.group(), f"{match.group('bname')} [...]")
+
+
 
 class Section:
-    type = ""
     name = ""
     content = ""
     processed = ""
 
-    def __init__(self, _content = "", _type = "", _name = ""):
+    def __init__(self, _name = "", _content = ""):
         self.content = _content
-        self.type = _type
         self.name = _name
 
     def process(self):
@@ -38,8 +77,6 @@ class DataSect(Section):
                 self.ops.append([match.group(), "decl"])
             elif match.group(4):
                 self.ops.append([match.group(), "arr"])
-
-        return self.ops
 
     def exctractWeights(self):
         w = re.compile(r"(?<=Weights: )(?P<type>\w+)\[\d+](.*?)(?=;)", re.DOTALL)
@@ -78,8 +115,8 @@ class CodeSect(Section):
                  "#endif"
                  ".endm")
 
-    def __init__(self, _content, _type, _name):
-        super().__init__(_content, _type, _name)
+    def __init__(self, _name, _content):
+        super().__init__(_name, _content)
         self.has_set = bool(re.search(r"nb1|sb", _content))
 
 
