@@ -66,6 +66,7 @@ class DataSect(Section):
     structs = []
     ops = []
 
+
     def split_op(self):
         decl_pattern = r"(\w+): (\w+) = (\d+)"
         arr_pattern = r"(\w+: )(?P<type>\w+)\[\d+](.*?)\);"
@@ -74,9 +75,9 @@ class DataSect(Section):
         found = re.finditer(all_patterns, self.content)
         for match in found:
             if match.group(1):
-                self.ops.append([match.group(), "decl"])
+                self.ops.append([match.group(), "decl", match])
             elif match.group(4):
-                self.ops.append([match.group(), "arr"])
+                self.ops.append([match.group(), "arr", match])
 
     def exctractWeights(self):
         w = re.compile(r"(?<=Weights: )(?P<type>\w+)\[\d+](.*?)(?=;)", re.DOTALL)
@@ -103,28 +104,43 @@ class DataSect(Section):
         for val in decs:
             self.declarations.append([val.group(1), val.group(2), val.group(3)])
 
+    def process(self):
+        self.split_op()
+        self.processed += f".section .text{self.name}\n"
+        for operation in self.ops:
+            if operation[2].group(2) == "word":
+                self.processed += "\t" + operation[2].group(1) + ": .long " + operation[2].group(3)
+            self.processed += "\n"
+
 
 class CodeSect(Section):
     has_set = False
-    macro_set = (r".macro SET reg,val"
-                 "#if __NM4__== 0)"
-                     "\\reg = \\val; "
-                 "#else"
-                     "sir = \\val; "
-                     "\\reg = sir;"
-                 "#endif"
-                 ".endm")
+    macro_set = (".macro SET reg,val\n" 
+                 "#if __NM4__== 0)\n"
+                     "\t\\reg = \\val; \n"
+                 "#else\n"
+                     "\tsir = \\val; \n"
+                     "\t\\reg = sir;\n"
+                 "#endif\n"
+                 ".endm\n")
 
     def __init__(self, _name, _content):
         super().__init__(_name, _content)
-        self.has_set = bool(re.search(r"nb1|sb", _content))
-
+        self.has_set = bool(re.search(r"nb1|sb", _content)) # TODO: добавить проверку на поиск других ключевых слов, я помню что там есть какие-то еще
 
     def process(self):
+        if self.has_set:
+            self.processed += self.macro_set + "\n"
+        self.processed += f".section .text{self.name}"
         for line in self.content.split("\n"):
-            pass
-
+            if (re.search(r"<(\w+)>", line)):
+                self.processed += (re.sub(r"<(\w+)>", r"\1:", line, 1))
+            elif (re.search(r"nb1|sb", line)): # TODO: добавить проверку на поиск других ключевых слов
+                self.processed += re.sub(r"(nb1|sb) +=( )+(.*?);", r"SET \1, \3", line)
+            else:
+                self.processed += line
+            self.processed += "\n"
 
 
 class NoBitsSect(Section):
-    temp = ""
+    def process(self):

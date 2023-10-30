@@ -8,9 +8,13 @@ ASM.deleteComments()
 
 
 ASM.createSections()
-input()
 
+for section in ASM.sections:
+    section.process()
 
+ASM.sections[0].split_op()
+
+print(ASM.sections[0].processed)
 
 
 
