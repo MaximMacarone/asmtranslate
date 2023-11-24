@@ -4,17 +4,18 @@ from sect_class import *
 
 
 ASM = Program("Step2.asm")
-ASM.deleteComments()
 
+ASM.deleteComments()
 
 ASM.createSections()
 
-for section in ASM.sections:
-    section.process()
+ASM.construct()
 
-ASM.sections[0].split_op()
+#print(ASM.short_content)
+ASM.defineOrder()
 
-print(ASM.sections[0].processed)
+
+
 
 
 

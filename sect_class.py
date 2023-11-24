@@ -6,9 +6,10 @@ nobitsSect_pattern = r"(?P<nobits>nobits) \"(?P<nname>.\w+)\"(?P<ncontent>.+?)en
 
 codeSect_pattern = r"(?P<begin>begin) \"(?P<bname>.\w+)\"(?P<bcontent>.+?)end \"\8\";"
 
-global_pattern = r"(.*?(?=begin|data|nobits))|(?=end \"\w+\";).*?"
+global_pattern = r"(.*?(?=begin|data|nobits))|(?=end \"\w+\";).*?" # TODO хрень какая то не робит
 
 allSect_pattern = re.compile(fr"{dataSect_pattern}|{nobitsSect_pattern}|{codeSect_pattern}", re.DOTALL)
+
 
 class Program:
 
@@ -16,7 +17,9 @@ class Program:
     outputFile = ""
     content = ""
     short_content = ""
-    sections = []
+    processed = ""
+    sections = {}
+    order = []
 
     def __init__(self, _inputfile):
         self.inputFile = _inputfile
@@ -32,15 +35,25 @@ class Program:
         found = re.finditer(allSect_pattern, self.content)
         for match in found:
             if match.group('data'):
-                self.sections.append(DataSect(match.group('dname'), match.group('dcontent')))
+                self.sections['data'] = (DataSect(match.group('dname'), match.group('dcontent')))
                 self.short_content = re.sub(re.escape(match.group()), f"{match.group('dname')} [...]", self.short_content)
             elif match.group('nobits'):
-                self.sections.append(NoBitsSect(match.group('nname'), match.group('ncontent')))
+                self.sections['nobits'] = (NoBitsSect(match.group('nname'), match.group('ncontent')))
                 self.short_content = self.short_content.replace(match.group(), f"{match.group('nname')} [...]")
             elif match.group('begin'):
-                self.sections.append(CodeSect(match.group('bname'), match.group('bcontent')))
+                self.sections['code'] = (CodeSect(match.group('bname'), match.group('bcontent')))
                 self.short_content = self.short_content.replace(match.group(), f"{match.group('bname')} [...]")
 
+    def construct(self):
+        for key, value in self.sections.items():
+            value.process()
+            self.processed += value.processed
+            self.processed += "\n"
+
+    def defineOrder(self):
+        for line in self.short_content.split("\n"):
+            if "[...]" not in line:
+                print(line)
 
 
 class Section:
@@ -56,7 +69,6 @@ class Section:
         pass
 
 
-
 class DataSect(Section):
     declarations = []
     mask_type = ""
@@ -68,9 +80,9 @@ class DataSect(Section):
 
 
     def split_op(self):
-        decl_pattern = r"(\w+): (\w+) = (\d+)"
+        decl_pattern = r"(\w+): (\w+) = (\d+\w{0,})"
         arr_pattern = r"(\w+: )(?P<type>\w+)\[\d+](.*?)\);"
-        struct_pattern = r"struct (\w+)\n(.*?)end (\1)"
+        struct_pattern = r"struct (\w+)\n(.*?)end (\1)" # TODO сделать разбор структур
         all_patterns = re.compile(fr"{decl_pattern}|{arr_pattern}", re.DOTALL)
         found = re.finditer(all_patterns, self.content)
         for match in found:
@@ -106,10 +118,12 @@ class DataSect(Section):
 
     def process(self):
         self.split_op()
-        self.processed += f".section .text{self.name}\n"
+        self.processed += f".section .data{self.name}\n"
         for operation in self.ops:
             if operation[2].group(2) == "word":
                 self.processed += "\t" + operation[2].group(1) + ": .long " + operation[2].group(3)
+            if operation[2].group(2) == "long":
+                self.processed += "\t" + operation[2].group(1) + ": .quad " + operation[2].group(3)
             self.processed += "\n"
 
 
@@ -143,4 +157,30 @@ class CodeSect(Section):
 
 
 class NoBitsSect(Section):
+    ops = []
+
+    def __init__(self, _name, _content):
+        super().__init__(_name, _content)
+        self.split_op()
+
+    def split_op(self):
+        decl_pattern = r"(\w+): (\w+)"
+        arr_pattern = r"(\w+: )(?P<type>\w+)\[\d+];"
+        all_patterns = re.compile(fr"{decl_pattern}|{arr_pattern}", re.DOTALL)
+        found = re.finditer(all_patterns, self.content)
+        for match in found:
+            if match.group(1):
+                self.ops.append([match.group(), "decl", match])
+            elif match.group(4):
+                self.ops.append([match.group(), "arr", match])
+
+
     def process(self):
+        self.processed += f".section .bss{self.name}\n"
+        for operation in self.ops:
+            if operation[2].group(2) == "word":
+                self.processed += "\t" + operation[2].group(1) + ": .long "
+            if operation[2].group(2) == "long":
+                self.processed += "\t" + operation[2].group(1) + ": .quad "
+            self.processed += "\n"
+
